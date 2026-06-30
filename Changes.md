@@ -1,6 +1,33 @@
 MQ2Nav Changelog
 ================
 
+FlopEQ Test Build - 2026-06-30
+------------------------------
+
+### Stability & Safety
+* Added additional in-game, character, and spawn guards around navigation, UI, door-click, and movement paths to reduce crashes during zoning, loading, plugin reloads, or character state transitions.
+* Fixed the shared `ValidIngame` helper so it checks character info before dereferencing it.
+* Added protection around movement key state updates so MQ2Nav will not touch key handlers unless the required game pointers are available.
+* Added safer door-click handling when character or spawn information is unavailable.
+* Added safer line-of-sight display handling in the debug UI.
+* Cleaned waypoint editor string copies so long waypoint names or descriptions truncate safely.
+
+### Navigation Behavior
+* Duplicate active navigation commands to the same destination are now ignored instead of restarting the same path repeatedly.
+* Repeated identical chat messages from MQ2Nav are now throttled for a few seconds to reduce spam from repeated path failures.
+* Unstuck checks now run less aggressively and limit repeated jump/correction attempts.
+* Active navigation now records clearer status when an incremental path update fails.
+
+### Macro & Plugin Integration
+* Added `${Nav.Status}` / `${Navigation.Status}` for quick macro-readable navigation state.
+* Added `${Nav.FailureReason}` / `${Navigation.FailureReason}` for the most recent navigation failure reason.
+* Failure reasons include values such as `NoMesh`, `NoPath`, `StartOffMesh`, `DestinationOffMesh`, `PartialPath`, `PathTooLong`, `FindPathFailed`, and `PathLost`.
+* Dispatches the existing `NavFailed` observer event when a command cannot start because no mesh is loaded.
+
+### Build Notes
+* Verified Release x64 build.
+* Updated the test plugin DLL in `E:\MQ Builds\test-release\release\plugins`.
+
 1.3.0
 -----
 
