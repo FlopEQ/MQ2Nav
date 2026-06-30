@@ -24,9 +24,6 @@ FlopEQ Test Build - 2026-06-30
 * Failure reasons include values such as `NoMesh`, `NoPath`, `StartOffMesh`, `DestinationOffMesh`, `PartialPath`, `PathTooLong`, `FindPathFailed`, and `PathLost`.
 * Dispatches the existing `NavFailed` observer event when a command cannot start because no mesh is loaded.
 
-### Build Notes
-* Verified Release x64 build.
-* Updated the test plugin DLL in `E:\MQ Builds\test-release\release\plugins`.
 
 1.3.0
 -----
