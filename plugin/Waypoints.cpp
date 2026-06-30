@@ -293,8 +293,8 @@ void RenderWaypointsUI()
 		editWaypoint = (currentWaypoint < g_waypoints.size())
 			? g_waypoints[currentWaypoint] : Waypoint();
 
-		strcpy_s(editWaypointName, editWaypoint.name.c_str());
-		strcpy_s(editWaypointDescription, editWaypoint.description.c_str());
+		strcpy_s(editWaypointName, sizeof(editWaypointName), editWaypoint.name.c_str());
+		strcpy_s(editWaypointDescription, sizeof(editWaypointDescription), editWaypoint.description.c_str());
 	}
 
 	// Right Pane

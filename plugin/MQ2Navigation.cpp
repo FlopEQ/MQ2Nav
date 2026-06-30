@@ -52,6 +52,9 @@ enum MOVEMENT_DIR
 
 void TrueMoveOn(MOVEMENT_DIR ucDirection)
 {
+	if (!pKeypressHandler || !pEverQuestInfo)
+		return;
+
 	switch (ucDirection)
 	{
 	case GO_FORWARD:
@@ -91,6 +94,9 @@ void TrueMoveOn(MOVEMENT_DIR ucDirection)
 
 void TrueMoveOff(MOVEMENT_DIR ucDirection)
 {
+	if (!pKeypressHandler || !pEverQuestInfo)
+		return;
+
 	switch (ucDirection)
 	{
 	case APPLY_TO_ALL:
@@ -145,7 +151,11 @@ static void NavigateCommand(PSPAWNINFO pChar, PCHAR szLine)
 
 static void ClickSwitch(CVector3 pos, EQSwitch* pSwitch)
 {
-	pSwitch->UseSwitch(GetCharInfo()->pSpawn->SpawnID, 0xFFFFFFFF, 0, nullptr);
+	PCHARINFO charInfo = GetCharInfo();
+	if (!pSwitch || !charInfo || !charInfo->pSpawn)
+		return;
+
+	pSwitch->UseSwitch(charInfo->pSpawn->SpawnID, 0xFFFFFFFF, 0, nullptr);
 }
 
 void ClickDoor(EQSwitch* pSwitch)
@@ -227,6 +237,21 @@ protected:
 			return;
 
 		using namespace spdlog;
+		std::string payload = fmt::to_string(msg.payload);
+		auto now = std::chrono::steady_clock::now();
+
+		if (msg.level >= level::info
+			&& msg.level <= level::err
+			&& payload == last_payload_
+			&& msg.level == last_level_
+			&& now - last_emit_ < std::chrono::seconds(3))
+		{
+			return;
+		}
+
+		last_payload_ = payload;
+		last_level_ = msg.level;
+		last_emit_ = now;
 
 		fmt::memory_buffer formatted;
 		switch (msg.level)
@@ -257,6 +282,9 @@ protected:
 	void flush_() override {}
 
 	bool enabled_ = true;
+	std::string last_payload_;
+	spdlog::level::level_enum last_level_ = spdlog::level::off;
+	std::chrono::steady_clock::time_point last_emit_ = std::chrono::steady_clock::time_point{};
 };
 
 spdlog::level::level_enum ExtractLogLevel(std::string_view input,
@@ -925,6 +953,13 @@ void MQ2NavigationPlugin::Command_Navigate(std::string_view line)
 	if (!destination->valid)
 		return;
 
+	if (IsDuplicateNavigationCommand(destination))
+	{
+		SetLastStatus("DuplicateCommand");
+		SPDLOG_DEBUG("Ignoring duplicate navigation command: {}", destination->command);
+		return;
+	}
+
 	BeginNavigation(destination);
 }
 
@@ -974,12 +1009,18 @@ void MQ2NavigationPlugin::BeginNavigation(const std::shared_ptr<DestinationInfo>
 	ResetPath();
 
 	if (!destInfo->valid)
+	{
+		SetLastStatus("InvalidDestination", "Destination did not parse");
 		return;
+	}
 
 	auto mesh = Get<NavMesh>();
 	if (!mesh->IsNavMeshLoaded())
 	{
+		SetLastStatus("NoMesh", "No mesh file loaded");
+		UpdateCommandState(m_currentCommandState.get(), *destInfo);
 		SPDLOG_ERROR("Cannot navigate - no mesh file loaded.");
+		s_navAPIImpl->DispatchObserverEvent(nav::NavObserverEvent::NavFailed, m_currentCommandState.get());
 		return;
 	}
 
@@ -1025,9 +1066,12 @@ void MQ2NavigationPlugin::BeginNavigation(const std::shared_ptr<DestinationInfo>
 	{
 		m_activePath->SetShowNavigationPaths(nav::GetSettings().show_nav_path);
 		m_isActive = m_activePath->GetPathSize() > 0;
+		if (!m_isActive)
+			SetLastStatus("NoPath", "Path had no nodes");
 	}
 	else if (m_activePath->IsFailed())
 	{
+		SetLastStatus("NoPath", m_activePath->GetFailureReason());
 		UpdateCommandState(m_currentCommandState.get(), *m_activePath->GetDestinationInfo());
 		s_navAPIImpl->DispatchObserverEvent(nav::NavObserverEvent::NavFailed, m_currentCommandState.get());
 	}
@@ -1045,6 +1089,8 @@ void MQ2NavigationPlugin::BeginNavigation(const std::shared_ptr<DestinationInfo>
 	if (m_isActive)
 	{
 		EzCommand("/squelch /stick off");
+		SetLastStatus("Active");
+		m_lastCommand = destInfo->command;
 
 		UpdateCommandState(m_currentCommandState.get(), *m_activePath->GetDestinationInfo());
 		m_currentCommandState->paused = m_isPaused;
@@ -1120,26 +1166,33 @@ void MQ2NavigationPlugin::StuckCheck()
 
 	clock::time_point now = clock::now();
 
-	// check every 100 ms
-	if (now > m_stuckTimer + std::chrono::milliseconds(100))
+	// check every 750 ms. Faster checks can create unnecessary jump/correction spam.
+	if (now > m_stuckTimer + std::chrono::milliseconds(750))
 	{
 		m_stuckTimer = now;
-		if (GetCharInfo() && GetCharInfo()->pSpawn)
+		PCHARINFO charInfo = GetCharInfo();
+		if (charInfo && charInfo->pSpawn)
 		{
-			if (GetCharInfo()->pSpawn->SpeedMultiplier != -10000
-				&& FindSpeed(GetCharInfo()->pSpawn)
-				&& (GetDistance(m_stuckX, m_stuckY) < FindSpeed(GetCharInfo()->pSpawn) / 600)
-				&& !GetCharInfo()->pSpawn->mPlayerPhysicsClient.Levitate
-				&& !GetCharInfo()->pSpawn->UnderWater
-				&& !GetCharInfo()->Stunned
+			PSPAWNINFO spawn = charInfo->pSpawn;
+			if (spawn->SpeedMultiplier != -10000
+				&& FindSpeed(spawn)
+				&& (GetDistance(m_stuckX, m_stuckY) < FindSpeed(spawn) / 600)
+				&& !spawn->mPlayerPhysicsClient.Levitate
+				&& !spawn->UnderWater
+				&& !charInfo->Stunned
 				&& m_isActive)
 			{
-				ExecuteCmd(CMD_JUMP, 1, 0);
-				ExecuteCmd(CMD_JUMP, 0, 0);
+				if (now - m_lastUnstuckAttempt > std::chrono::seconds(2))
+				{
+					m_lastUnstuckAttempt = now;
+					SetLastStatus("UnstuckAttempt");
+					ExecuteCmd(CMD_JUMP, 1, 0);
+					ExecuteCmd(CMD_JUMP, 0, 0);
+				}
 			}
 
-			m_stuckX = GetCharInfo()->pSpawn->X;
-			m_stuckY = GetCharInfo()->pSpawn->Y;
+			m_stuckX = spawn->X;
+			m_stuckY = spawn->Y;
 		}
 	}
 }
@@ -1151,7 +1204,8 @@ void MQ2NavigationPlugin::Look(const glm::vec3& pos, FacingType facing)
 	if (m_isPaused)
 		return;
 
-	PSPAWNINFO pSpawn = GetCharInfo()->pSpawn;
+	PCHARINFO charInfo = GetCharInfo();
+	PSPAWNINFO pSpawn = charInfo ? charInfo->pSpawn : nullptr;
 	if (!pSpawn || !pControlledPlayer)
 		return;
 
@@ -1240,6 +1294,8 @@ void MQ2NavigationPlugin::AttemptMovement()
 			// update path
 			m_activePath->UpdatePath(false, true);
 			m_isActive = m_activePath->GetPathSize() > 0;
+			if (!m_isActive && m_activePath->IsFailed())
+				SetLastStatus("PathLost", m_activePath->GetFailureReason());
 
 			m_pathfindTimer = now;
 		}
@@ -1793,6 +1849,7 @@ void MQ2NavigationPlugin::Stop(bool reachedDestination)
 		}
 		else
 		{
+			SetLastStatus("Arrived");
 			s_navAPIImpl->DispatchObserverEvent(nav::NavObserverEvent::NavDestinationReached, m_currentCommandState.get());
 		}
 
@@ -1845,6 +1902,28 @@ void MQ2NavigationPlugin::ResetPath()
 	m_pEndingSwitch = nullptr;
 	m_endingGround.Reset();
 	m_activePath.reset();
+}
+
+void MQ2NavigationPlugin::SetLastStatus(std::string status, std::string failureReason)
+{
+	m_lastStatus = std::move(status);
+	m_lastFailureReason = std::move(failureReason);
+}
+
+bool MQ2NavigationPlugin::IsDuplicateNavigationCommand(const std::shared_ptr<DestinationInfo>& destInfo) const
+{
+	if (!m_isActive || !m_activePath || !destInfo || !destInfo->valid)
+		return false;
+
+	auto activeInfo = m_activePath->GetDestinationInfo();
+	if (!activeInfo)
+		return false;
+
+	if (!destInfo->command.empty() && destInfo->command == activeInfo->command)
+		return true;
+
+	return destInfo->type == activeInfo->type
+		&& glm::distance2(destInfo->eqDestinationPos, activeInfo->eqDestinationPos) < 1.0f;
 }
 
 #pragma endregion

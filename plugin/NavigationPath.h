@@ -137,6 +137,7 @@ public:
 	dtNavMeshQuery* GetNavMeshQuery() const { return m_query.get(); }
 
 	bool IsFailed() const { return m_failed; }
+	const std::string& GetFailureReason() const { return m_failureReason; }
 
 	mq::Signal<> PathUpdated;
 	mq::Signal<> RenderPathUpdated;
@@ -160,6 +161,7 @@ private:
 	glm::vec3 m_lastPos;
 
 	bool m_failed = false;
+	std::string m_failureReason;
 
 	// the plugin owns the mesh
 	std::shared_ptr<dtNavMesh> m_navMesh;

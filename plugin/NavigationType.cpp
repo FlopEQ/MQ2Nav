@@ -24,6 +24,8 @@ MQ2NavigationType::MQ2NavigationType()
 	TypeMember(PathLength);
 	TypeMember(Setting);
 	TypeMember(Velocity);
+	TypeMember(Status);
+	TypeMember(FailureReason);
 }
 
 MQ2NavigationType::~MQ2NavigationType()
@@ -73,6 +75,16 @@ bool MQ2NavigationType::GetMember(MQVarPtr VarPtr, const char* Member, PCHAR Ind
 		Dest.Int = static_cast<int>(glm::round(GetMyVelocity()));
 		return true;
 	}
+	case Status:
+		Dest.Type = mq::datatypes::pStringType;
+		strcpy_s(DataTypeTemp, m_nav->GetLastStatus().c_str());
+		Dest.Ptr = &DataTypeTemp[0];
+		return true;
+	case FailureReason:
+		Dest.Type = mq::datatypes::pStringType;
+		strcpy_s(DataTypeTemp, m_nav->GetLastFailureReason().c_str());
+		Dest.Ptr = &DataTypeTemp[0];
+		return true;
 	}
 
 	strcpy_s(DataTypeTemp, "NULL");

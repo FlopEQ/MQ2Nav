@@ -216,7 +216,8 @@ void NavigationPath::UpdatePath(bool force, bool incremental)
 		m_query->init(m_navMesh.get(), NAVMESH_QUERY_MAX_NODES);
 	}
 
-	PSPAWNINFO me = GetCharInfo()->pSpawn;
+	PCHARINFO charInfo = GetCharInfo();
+	PSPAWNINFO me = charInfo ? charInfo->pSpawn : nullptr;
 	if (me == nullptr)
 		return;
 
@@ -338,6 +339,7 @@ std::unique_ptr<StraightPath> NavigationPath::RecomputePath(
 
 	if (!startRef)
 	{
+		m_failureReason = "StartOffMesh";
 		if (!incremental)
 		{
 			SPDLOG_ERROR("Could not locate starting point on navmesh: {:.2f}", startPos.zxy());
@@ -357,6 +359,7 @@ std::unique_ptr<StraightPath> NavigationPath::RecomputePath(
 
 	if (!endRef)
 	{
+		m_failureReason = "DestinationOffMesh";
 		if (!incremental)
 		{
 			SPDLOG_ERROR("Could not locate destination on navmesh: {:.2f}", endPos.zxy());
@@ -427,6 +430,7 @@ std::unique_ptr<StraightPath> NavigationPath::RecomputePath(
 
 	if (dtStatusFailed(status))
 	{
+		m_failureReason = "FindPathFailed";
 		SPDLOG_DEBUG("findPath from {} to {} failed.", startPos, endPos);
 
 		m_failed = true;
@@ -436,6 +440,7 @@ std::unique_ptr<StraightPath> NavigationPath::RecomputePath(
 	if (dtStatusDetail(status, DT_OUT_OF_NODES)
 		|| dtStatusDetail(status, DT_BUFFER_TOO_SMALL))
 	{
+		m_failureReason = "PathTooLong";
 		SPDLOG_DEBUG("findPath from {} to {} failed: incomplete result ({:#x})",
 			startPos, endPos, (status & DT_STATUS_DETAIL_MASK));
 
@@ -451,6 +456,7 @@ std::unique_ptr<StraightPath> NavigationPath::RecomputePath(
 	if ((numPolys > 0 && (polys[numPolys - 1] != endRef))
 		|| dtStatusDetail(status, DT_PARTIAL_RESULT))
 	{
+		m_failureReason = "PartialPath";
 		// Partial path, did not find path to target
 		SPDLOG_DEBUG("findPath from {:.2f} to {:.2f} returned a partial result.", startPos, endPos);
 

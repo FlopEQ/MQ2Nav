@@ -36,6 +36,8 @@ public:
 
 		Setting = 8,
 		Velocity = 9,
+		Status = 10,
+		FailureReason = 11,
 	};
 
 	MQ2NavigationType();

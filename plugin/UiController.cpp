@@ -435,8 +435,9 @@ void UiController::PerformUpdateTab(TabPage page)
 				ImGui::LabelText("Distance", "%.2f", glm::distance(destPos, myPos));
 				ImGui::LabelText("Distance (2d)", "%.2f", glm::distance(destPos.xy(), myPos.xy()));
 
+				PCHARINFO charInfo = GetCharInfo();
 				ImGui::LabelText("Line of Sight", "%s",
-					CastRay(GetCharInfo()->pSpawn, destPos.x, destPos.y, destPos.z + 10) ? "true" : "false");
+					(charInfo && charInfo->pSpawn && CastRay(charInfo->pSpawn, destPos.x, destPos.y, destPos.z + 10)) ? "true" : "false");
 				ImGui::LabelText("Line of Sight (mesh)", "%s",
 					activePath->CanSeeDestination() ? "true" : "false");
 			}

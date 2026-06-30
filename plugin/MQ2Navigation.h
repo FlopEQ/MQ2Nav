@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <chrono>
+#include <string>
 #include <typeinfo>
 #include <unordered_map>
 
@@ -207,6 +208,8 @@ public:
 	bool IsActive() const { return m_isActive; }
 	bool IsPaused() const { return m_isPaused; }
 	bool IsMeshLoaded() const;
+	const std::string& GetLastStatus() const { return m_lastStatus; }
+	const std::string& GetLastFailureReason() const { return m_lastFailureReason; }
 
 	// Check if a point is pathable (given a coordinate string)
 	bool CanNavigateToPoint(std::string_view line);
@@ -260,6 +263,8 @@ private:
 	void SetPaused(bool paused);
 
 	void ResetPath();
+	void SetLastStatus(std::string status, std::string failureReason = {});
+	bool IsDuplicateNavigationCommand(const std::shared_ptr<DestinationInfo>& destInfo) const;
 
 	void OnMovementKeyPressed();
 
@@ -311,6 +316,10 @@ private:
 	std::shared_ptr<spdlog::sinks::sink> m_chatSink;
 
 	std::unique_ptr<nav::NavCommandState> m_currentCommandState;
+	std::string m_lastStatus = "Ready";
+	std::string m_lastFailureReason;
+	std::string m_lastCommand;
+	clock::time_point m_lastUnstuckAttempt = clock::time_point{};
 	int m_renderCallbacks = -1;
 };
 
